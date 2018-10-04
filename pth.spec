@@ -16,6 +16,8 @@ Patch3:         pth-2.0.7-test_std.patch
 # bz 744740 / patch from Mikael Pettersson
 Patch4: pth-2.0.7-linux3.patch
 
+BuildRequires: gcc
+
 %description
 Pth is a very portable POSIX/ANSI-C based library for Unix platforms
 which provides non-preemptive priority-based scheduling for multiple
