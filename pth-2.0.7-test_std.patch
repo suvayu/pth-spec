@@ -1,0 +1,12 @@
+diff -Nur pth-2.0.7-orig/Makefile.in pth-2.0.7/Makefile.in
+--- pth-2.0.7-orig/Makefile.in	2006-06-08 19:54:01.000000000 +0200
++++ pth-2.0.7/Makefile.in	2011-10-31 22:36:22.784082615 +0100
+@@ -340,7 +340,7 @@
+ #   execute and debug one of the test programs
+ test: test-std
+ test-std: test_std
+-	-@./test_std; \
++	@./test_std; \
+ 	if [ $$? -eq 0 ]; then \
+ 	    touch .done-test >/dev/null 2>&1 || $(TRUE); \
+ 	    if [ ".`grep $(PLATFORM) $(S)PORTING`" = . ]; then \

@@ -1,0 +1,103 @@
+To: bug-pth@gnu.org
+Subject: [PATCH] fix pth for makecontext-less glibc on Linux 3.x kernels
+Cc: pth-users@gnu.org
+
+Attempting to build pth-2.0.7 on arm-linux-gnueabi, running a 3.x
+kernel, and with a glibc that doesn't yet have makecontext et al
+(glibc-2.14.1 in my case) results in the following during configure:
+
+Machine Context Implementation:
+checking for ucontext.h... yes
+checking for makecontext... no
+checking for swapcontext... no
+checking for getcontext... no
+checking for setcontext... no
+checking for usable SVR4/SUSv2 makecontext(2)/swapcontext(2)... no
+checking for signal.h... (cached) yes
+checking for sigsetjmp... no
+checking for siglongjmp... yes
+checking for setjmp... yes
+checking for longjmp... yes
+checking for _setjmp... yes
+checking for _longjmp... yes
+checking for sigaltstack... yes
+checking for sigstack... yes
+checking for signal-mask aware setjmp(3)/longjmp(3)... yes: sjljlx
+checking for typedef stack_t... (cached) yes
+checking for direction of stack growth... down
+checking for makecontext... (cached) no
+checking for stack setup via makecontext... N.A.
+checking for sigaltstack... (cached) yes
+checking for typedef stack_t... (cached) yes
+checking for stack setup via sigaltstack... ok
+checking for sigstack... (cached) yes
+checking for stack setup via sigstack... guessed
+decision on mctx implementation... sjlj/sjljlx/none
+
+Note the "sjljlx", that's bogus since sjljlx is a fallback for
+truly ancient systems; the correct choice is ssjlj.
+
+Configure succeeds, but 'make' then results in:
+
+./shtool scpp -o pth_p.h -t pth_p.h.in -Dcpp -Cintern -M '==#==' pth_compat.c pth_debug.c pth_syscall.c pth_errno.c pth_ring.c pth_mctx.c pth_uctx.c pth_clean.c pth_time.c pth_tcb.c pth_util.c pth_pqueue.c pth_event.c pth_sched.c pth_data.c pth_msg.c pth_cancel.c pth_sync.c pth_attr.c pth_lib.c pth_fork.c pth_high.c pth_ext.c pth_string.c pthread.c
+./libtool --mode=compile --quiet gcc -c -I. -O2 -pipe pth_debug.c
+./libtool --mode=compile --quiet gcc -c -I. -O2 -pipe pth_ring.c
+./libtool --mode=compile --quiet gcc -c -I. -O2 -pipe pth_pqueue.c
+./libtool --mode=compile --quiet gcc -c -I. -O2 -pipe pth_time.c
+./libtool --mode=compile --quiet gcc -c -I. -O2 -pipe pth_errno.c
+./libtool --mode=compile --quiet gcc -c -I. -O2 -pipe pth_mctx.c
+pth_mctx.c: In function '__pth_mctx_set':
+pth_mctx.c:480:2: error: #error "Unsupported Linux (g)libc version and/or platform"
+make: *** [pth_mctx.lo] Error 1
+
+This happens because there's a Linux kernel version check that
+unfortunately only recognises 2.x versions, so it classifies a
+3.x kernel as "braindead", which selects sjljlx and causes the
+breakage.
+
+The fix is to expand the kernel version regexp in aclocal.m4 to
+also accept 3.x kernels; with that fix configure says:
+
+checking for signal-mask aware setjmp(3)/longjmp(3)... yes: ssjlj
+checking for typedef stack_t... (cached) yes
+checking for direction of stack growth... down
+checking for makecontext... (cached) no
+checking for stack setup via makecontext... N.A.
+checking for sigaltstack... (cached) yes
+checking for typedef stack_t... (cached) yes
+checking for stack setup via sigaltstack... ok
+checking for sigstack... (cached) yes
+checking for stack setup via sigstack... guessed
+decision on mctx implementation... sjlj/ssjlj/sas
+
+Both 'make' and 'make test' then succeed.
+
+m68k-linux' glibc also lacks makecontext() et al, so it too is sensitive
+to the kernel version check.  For m68k there is some specific support
+in the sjljlx fallback code which appears to work, but with the fix
+m68k too gets to use sjlj/ssjlj/sas (which works fine btw).
+
+Signed-off-by: Mikael Pettersson <mikpe@it.uu.se>
+---
+--- pth-2.0.7/aclocal.m4.~1~	2006-06-08 19:54:01.000000000 +0200
++++ pth-2.0.7/aclocal.m4	2012-05-30 18:44:42.000000000 +0200
+@@ -1074,7 +1074,7 @@ case $PLATFORM in
+         braindead=no
+         case "x`uname -r`" in
+ changequote(, )dnl
+-            x2.[23456789]* ) ;;
++            x2.[23456789]* | x3.[0-9]* ) ;;
+ changequote([, ])
+             * ) braindead=yes ;;
+         esac
+--- pth-2.0.7/configure.~1~	2006-06-08 20:14:48.000000000 +0200
++++ pth-2.0.7/configure	2012-05-30 18:45:03.000000000 +0200
+@@ -22512,7 +22512,7 @@ case $PLATFORM in
+     *-*-linux* )
+         braindead=no
+         case "x`uname -r`" in
+-            x2.[23456789]* ) ;;
++            x2.[23456789]* | x3.[0-9]* ) ;;
+ 
+             * ) braindead=yes ;;
+         esac
